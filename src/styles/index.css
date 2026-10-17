@@ -1,0 +1,169 @@
+@import 'tailwindcss';
+@import '@xyflow/react/dist/style.css';
+@import '@flaticon/flaticon-uicons/css/regular/rounded.css';
+
+:root,
+html[data-theme='dark'] {
+  --cs-bg: #0f1219;
+  --cs-surface: #171b26;
+  --cs-surface-2: #1e2433;
+  --cs-border: #2a3347;
+  --cs-text: #e8ecf4;
+  --cs-muted: #8b95a8;
+  --cs-accent: #5b8def;
+  --cs-accent-soft: #3d5a8a;
+  --cs-success: #7dd3a8;
+  --cs-danger: #e87a7a;
+  --cs-canvas: #12151e;
+  --cs-grid: #1c2230;
+  --cs-edge: #8b95a8;
+  --cs-tooltip: #0a0d14;
+  --cs-node-card: #1e2433;
+  --cs-node-card-text: #e8ecf4;
+  --cs-on-accent: #0f1219;
+  --cs-handle: #e8ecf4;
+  --cs-handle-border: #0f1219;
+  --cs-on-shape: #0f1219;
+}
+
+html[data-theme='light'] {
+  --cs-bg: #eef1f6;
+  --cs-surface: #ffffff;
+  --cs-surface-2: #f5f7fb;
+  --cs-border: #d0d7e3;
+  --cs-text: #1a2233;
+  --cs-muted: #5c6b82;
+  --cs-accent: #3b6fd8;
+  --cs-accent-soft: #c5d6f5;
+  --cs-success: #1f9d6a;
+  --cs-danger: #d94c4c;
+  --cs-canvas: #e4e9f1;
+  --cs-grid: #cfd6e2;
+  --cs-edge: #5c6b82;
+  --cs-tooltip: #1a2233;
+  --cs-node-card: #ffffff;
+  --cs-node-card-text: #1a2233;
+  --cs-on-accent: #ffffff;
+  --cs-handle: #ffffff;
+  --cs-handle-border: #1a2233;
+  --cs-on-shape: #0f1219;
+}
+
+:root {
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  color: var(--cs-text);
+  background: var(--cs-bg);
+  line-height: 1.4;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--cs-bg);
+  color: var(--cs-text);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.react-flow__background {
+  background: var(--cs-canvas) !important;
+}
+
+.react-flow__controls-button {
+  background: var(--cs-surface) !important;
+  border-bottom-color: var(--cs-border) !important;
+  fill: var(--cs-text) !important;
+}
+
+.react-flow__minimap {
+  background: var(--cs-surface) !important;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+/* Keep edges (and endpoint markers) above nodes so tips stay visible */
+.react-flow__edges {
+  z-index: 5 !important;
+}
+
+.react-flow__edgelabel-renderer {
+  z-index: 6;
+}
+
+.cs-edge-endpoint {
+  pointer-events: none;
+}
+
+.react-flow__edgelabel-renderer {
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Connection dots: hidden unless the node is hovered/selected or a link is mid-drag */
+.react-flow__handle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.12s ease;
+}
+
+.react-flow__node:hover .react-flow__handle,
+.react-flow__node.selected .react-flow__handle,
+.react-flow__handle.connectingfrom {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* While drawing a connection, reveal handles on other nodes as drop targets */
+.react-flow__handle.connectingto {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.fi {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Keep strokes + labels under nodes so lines never paint over diagram cards */
+.react-flow__edges {
+  z-index: 1 !important;
+}
+
+.react-flow__edgelabel-renderer {
+  z-index: 2 !important;
+}
+
+.react-flow__nodes {
+  z-index: 3 !important;
+}
+
+.react-flow__node {
+  z-index: 1;
+}
+
+.react-flow__node-sketch:has([data-shape='group']),
+.react-flow__node:has(.border-dashed) {
+  z-index: 0;
+}
