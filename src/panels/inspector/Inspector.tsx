@@ -27,11 +27,11 @@ const SHAPE_SELECT_OPTIONS = ALL_SHAPE_OPTIONS.map((opt) => ({
   label: opt.label,
   icon: (
     <span
-      className="inline-flex h-7 w-7 items-center justify-center rounded"
+      className="inline-flex h-5 w-5 items-center justify-center rounded"
       style={{ background: `${opt.defaultColor}33`, color: opt.defaultColor }}
       aria-hidden
     >
-      <Icon name={SHAPE_ICONS[opt.shape]} className="text-sm" />
+      <Icon name={SHAPE_ICONS[opt.shape]} className="text-[11px]" />
     </span>
   ),
 }))
@@ -57,23 +57,23 @@ export function Inspector() {
   const edge = edges.find((e) => e.id === selectedEdgeId)
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-l border-[var(--cs-border)] bg-[var(--cs-surface)]">
-      <div className="border-b border-[var(--cs-border)] px-3 py-3">
-        <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-[var(--cs-muted)]">
-          <Icon name="settings" className="text-xs" />
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-[var(--cs-border)] px-2.5 py-2">
+        <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--cs-muted)]">
+          <Icon name="settings" className="text-[10px]" />
           Inspector
         </p>
       </div>
 
-      <div className="flex-1 overflow-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-auto px-2.5 py-2">
         {!node && !edge ? (
-          <p className="text-sm text-[var(--cs-muted)]">
+          <p className="text-xs text-[var(--cs-muted)]">
             Select a shape or connector to edit its properties.
           </p>
         ) : null}
 
         {node ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <Field label="Label">
               <input
                 value={node.data.label}
@@ -89,7 +89,7 @@ export function Inspector() {
                 value={node.data.color}
                 onFocus={() => takeSnapshot()}
                 onChange={(e) => updateSelectedNode({ color: e.target.value }, { skipHistory: true })}
-                className="h-9 w-full cursor-pointer rounded border border-[var(--cs-border)] bg-transparent"
+                className="h-7 w-full cursor-pointer rounded border border-[var(--cs-border)] bg-transparent"
               />
             </Field>
             <Field label="Shape">
@@ -139,7 +139,7 @@ export function Inspector() {
         ) : null}
 
         {edge && !node ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <Field label="Label">
               <input
                 value={typeof edge.label === 'string' ? edge.label : ''}
@@ -150,7 +150,7 @@ export function Inspector() {
                 className={inputClass}
               />
             </Field>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <Field label="Path">
                 <select
                   value={edge.type === 'orthogonal' ? 'smoothstep' : (edge.type ?? 'smoothstep')}
@@ -218,7 +218,7 @@ export function Inspector() {
           </div>
         ) : null}
       </div>
-    </aside>
+    </section>
   )
 }
 
@@ -253,12 +253,12 @@ function LinesField({
 
   return (
     <div className="block">
-      <span className="mb-1 block text-[11px] uppercase tracking-wider text-[var(--cs-muted)]">
+      <span className="mb-0.5 block text-[10px] uppercase tracking-wider text-[var(--cs-muted)]">
         {label}
       </span>
       <textarea
         value={text}
-        rows={5}
+        rows={3}
         onFocus={onFocusSnapshot}
         onKeyDown={stopKeys}
         onKeyUp={stopKeys}
@@ -269,7 +269,7 @@ function LinesField({
           timerRef.current = setTimeout(() => onCommit(next.split('\n')), 250)
         }}
         onBlur={() => flush(text)}
-        className={inputClass}
+        className={`${textareaClass} min-h-[3.5rem] resize-y`}
         placeholder={'id : uuid\nname : string'}
       />
     </div>
@@ -305,7 +305,7 @@ function EndpointControls({
   onMarker: (kind: EdgeMarkerKind) => void
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <select
         value={side}
         aria-label="Side"
@@ -339,7 +339,7 @@ function EndpointControls({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="block">
-      <span className="mb-1 block text-[11px] uppercase tracking-wider text-[var(--cs-muted)]">
+      <span className="mb-0.5 block text-[10px] uppercase tracking-wider text-[var(--cs-muted)]">
         {label}
       </span>
       {children}
@@ -348,4 +348,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const inputClass =
-  'w-full rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-2 py-2 text-sm outline-none focus:border-[var(--cs-accent)]'
+  'h-7 w-full rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 text-xs outline-none focus:border-[var(--cs-accent)]'
+
+const textareaClass =
+  'w-full rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 py-1 text-xs leading-snug outline-none focus:border-[var(--cs-accent)]'

@@ -25,6 +25,7 @@ import {
   orderNodesParentsFirst,
 } from '@/diagram/grouping'
 import { toDedicatedHandle, withDedicatedHandles } from '@/diagram/handles'
+import { collectGroupMemberIds } from '@/diagram/layers'
 import { cloneSnapshot, pushHistory, type Snapshot } from '@/diagram/history'
 import { autoLayoutGraph } from '@/diagram/autoLayout'
 import { createId } from '@/diagram/ids'
@@ -94,6 +95,10 @@ type DiagramState = {
   sendToBack: () => void
   snapNodeToGroup: (nodeId: string) => void
   snapNodesToGroup: (nodeIds: string[]) => void
+  /** Show/hide a single canvas item (non-group node) on the preview. */
+  setItemVisible: (nodeId: string, visible: boolean) => void
+  /** Show/hide a group and all nested members on the preview. */
+  setGroupVisible: (groupId: string, visible: boolean) => void
   replaceGraph: (nodes: SketchNode[], edges: SketchEdge[], diagramType?: DiagramType) => void
   persistDraft: () => void
 }
@@ -118,6 +123,44 @@ function selectedEdgeIds(state: {
 
 function zOf(el: { zIndex?: number }): number {
   return el.zIndex ?? 0
+}
+
+function applyVisibility(
+  get: () => DiagramState,
+  set: (
+    partial:
+      | Partial<DiagramState>
+      | ((state: DiagramState) => Partial<DiagramState>),
+  ) => void,
+  memberIds: Set<string>,
+  visible: boolean,
+) {
+  const { nodes, edges, selectedNodeId, selectedEdgeId } = get()
+  const hide = !visible
+  const nextNodes = nodes.map((n) => {
+    if (!memberIds.has(n.id)) return n
+    if (!!n.hidden === hide && !(hide && n.selected)) return n
+    return { ...n, hidden: hide, selected: hide ? false : n.selected }
+  })
+
+  const hiddenNodes = new Set(nextNodes.filter((n) => n.hidden).map((n) => n.id))
+  const nextEdges = edges.map((e) => {
+    const shouldHide = hiddenNodes.has(e.source) || hiddenNodes.has(e.target)
+    if (!!e.hidden === shouldHide && !(shouldHide && e.selected)) return e
+    return { ...e, hidden: shouldHide, selected: shouldHide ? false : e.selected }
+  })
+
+  set({
+    nodes: nextNodes,
+    edges: nextEdges,
+    selectedNodeId:
+      selectedNodeId && hiddenNodes.has(selectedNodeId) ? null : selectedNodeId,
+    selectedEdgeId:
+      selectedEdgeId && nextEdges.find((e) => e.id === selectedEdgeId)?.hidden
+        ? null
+        : selectedEdgeId,
+  })
+  get().persistDraft()
 }
 
 const defaultDoc = createEmptyDocument()
@@ -527,6 +570,16 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
     if (next === get().nodes) return
     set({ nodes: next })
     get().persistDraft()
+  },
+
+  setItemVisible: (nodeId, visible) => {
+    applyVisibility(get, set, new Set([nodeId]), visible)
+  },
+
+  setGroupVisible: (groupId, visible) => {
+    const members = collectGroupMemberIds(groupId, get().nodes)
+    if (members.size === 0) return
+    applyVisibility(get, set, members, visible)
   },
 
   setSelection: (nodeId, edgeId) => set({ selectedNodeId: nodeId, selectedEdgeId: edgeId }),

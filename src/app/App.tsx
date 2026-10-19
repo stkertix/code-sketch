@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { DiagramCanvas } from '@/canvas/DiagramCanvas'
-import { Inspector } from '@/panels/inspector/Inspector'
 import { Palette } from '@/panels/palette/Palette'
+import { RightSidebar } from '@/panels/RightSidebar'
 import { Toolbar } from '@/app/shell/Toolbar'
 import { useKeyboardShortcuts } from '@/canvas/useKeyboardShortcuts'
 import { useDiagramStore } from '@/diagram/store'
@@ -28,7 +28,7 @@ export default function App() {
         <main className="relative min-w-0 flex-1">
           <DiagramCanvas />
         </main>
-        <Inspector />
+        <RightSidebar />
       </div>
     </div>
   )

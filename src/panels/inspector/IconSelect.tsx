@@ -26,17 +26,17 @@ type Props<T extends string> = {
 }
 
 function computeMenuStyle(anchor: DOMRect): CSSProperties {
-  const gap = 4
-  const maxH = 240
+  const gap = 2
+  const maxH = 200
   const spaceBelow = window.innerHeight - anchor.bottom - gap - 8
   const spaceAbove = anchor.top - gap - 8
-  const openUp = spaceBelow < 140 && spaceAbove > spaceBelow
-  const height = Math.max(96, Math.min(maxH, openUp ? spaceAbove : spaceBelow))
+  const openUp = spaceBelow < 120 && spaceAbove > spaceBelow
+  const height = Math.max(80, Math.min(maxH, openUp ? spaceAbove : spaceBelow))
 
   return {
     position: 'fixed',
-    left: Math.max(8, Math.min(anchor.left, window.innerWidth - Math.max(anchor.width, 160) - 8)),
-    width: Math.max(anchor.width, 160),
+    left: Math.max(8, Math.min(anchor.left, window.innerWidth - Math.max(anchor.width, 140) - 8)),
+    width: Math.max(anchor.width, 140),
     zIndex: 10000,
     maxHeight: height,
     ...(openUp
@@ -138,11 +138,11 @@ export function IconSelect<T extends string>({
         aria-expanded={open}
         aria-controls={listId}
         onClick={toggle}
-        className={`flex w-full items-center gap-2 rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-2 py-2 text-left text-sm outline-none focus:border-[var(--cs-accent)] ${className}`}
+        className={`flex h-7 w-full items-center gap-1.5 rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 text-left text-xs outline-none focus:border-[var(--cs-accent)] ${className}`}
       >
         <span className="flex shrink-0 items-center justify-center">{selected?.icon}</span>
         <span className="min-w-0 flex-1 truncate">{selected?.label}</span>
-        <Icon name="angle-small-down" className="shrink-0 text-xs text-[var(--cs-muted)]" />
+        <Icon name="angle-small-down" className="shrink-0 text-[10px] text-[var(--cs-muted)]" />
       </button>
 
       {open && menuStyle
@@ -152,7 +152,7 @@ export function IconSelect<T extends string>({
               id={listId}
               role="listbox"
               style={menuStyle}
-              className="overflow-auto rounded-md border border-[var(--cs-border)] bg-[var(--cs-surface)] py-1 shadow-xl"
+              className="overflow-auto rounded border border-[var(--cs-border)] bg-[var(--cs-surface)] py-0.5 shadow-xl"
             >
               {options.map((opt) => {
                 const isSelected = opt.value === value
@@ -166,7 +166,7 @@ export function IconSelect<T extends string>({
                         onChange(opt.value)
                         close()
                       }}
-                      className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm transition-colors ${
+                      className={`flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-xs transition-colors ${
                         isSelected
                           ? 'bg-[var(--cs-accent)]/15 text-[var(--cs-accent)]'
                           : 'text-[var(--cs-text)] hover:bg-[var(--cs-surface-2)]'

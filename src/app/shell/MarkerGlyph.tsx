@@ -141,15 +141,15 @@ export function MarkerIcon({
   return (
     <svg
       className={className}
-      width={36}
-      height={20}
+      width={28}
+      height={14}
       viewBox="-28 -12 32 24"
       overflow="visible"
       aria-hidden={title ? undefined : true}
       role={title ? 'img' : undefined}
     >
       {title ? <title>{title}</title> : null}
-      <g transform="scale(0.55)">
+      <g transform="scale(0.5)">
         <MarkerGlyph kind={kind} color={color} outline="var(--cs-surface-2, #1a1f2b)" />
       </g>
     </svg>
