@@ -56,6 +56,7 @@ function makeEdge(
     target,
     label,
     type: 'smoothstep',
+    zIndex: 1000,
     style: { stroke: 'var(--cs-edge)', strokeWidth: 2 },
     data: {
       sourceMarker: markers?.sourceMarker ?? 'none',

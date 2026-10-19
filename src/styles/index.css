@@ -102,21 +102,38 @@ select {
   stroke-linecap: round;
 }
 
-/* Keep edges (and endpoint markers) above nodes so tips stay visible */
+/*
+ * Stacking: groups < shapes < edges < labels/markers < live connection.
+ * Edges must paint over nodes so crow's feet / arrows stay visible.
+ */
+.react-flow__nodes {
+  z-index: 1 !important;
+}
+
+.react-flow__node {
+  z-index: 1;
+}
+
+.react-flow__node-sketch:has([data-shape='group']),
+.react-flow__node:has(.border-dashed) {
+  z-index: 0;
+}
+
 .react-flow__edges {
   z-index: 5 !important;
 }
 
 .react-flow__edgelabel-renderer {
-  z-index: 6;
-}
-
-.cs-edge-endpoint {
+  z-index: 6 !important;
   pointer-events: none;
 }
 
-.react-flow__edgelabel-renderer {
-  z-index: 10;
+.react-flow__connectionline,
+.react-flow__connection {
+  z-index: 7 !important;
+}
+
+.cs-edge-endpoint {
   pointer-events: none;
 }
 
@@ -144,26 +161,4 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Keep strokes + labels under nodes so lines never paint over diagram cards */
-.react-flow__edges {
-  z-index: 1 !important;
-}
-
-.react-flow__edgelabel-renderer {
-  z-index: 2 !important;
-}
-
-.react-flow__nodes {
-  z-index: 3 !important;
-}
-
-.react-flow__node {
-  z-index: 1;
-}
-
-.react-flow__node-sketch:has([data-shape='group']),
-.react-flow__node:has(.border-dashed) {
-  z-index: 0;
 }

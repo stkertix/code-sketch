@@ -141,6 +141,7 @@ function CanvasInner() {
   const defaultEdgeOptions = useMemo(
     () => ({
       type: DEFAULT_EDGE_TYPE,
+      zIndex: 1000,
       style: { stroke: 'var(--cs-edge)', strokeWidth: 2 },
     }),
     [],

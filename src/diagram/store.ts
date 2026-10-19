@@ -160,6 +160,8 @@ function normalizeEdges(edges: SketchEdge[]): SketchEdge[] {
         {
           ...e,
           type,
+          // Keep edges above nodes within the RF edge layer
+          zIndex: e.zIndex ?? 1000,
           style: { stroke: 'var(--cs-edge)', strokeWidth: 2, ...e.style },
         },
         sourceMarker,
@@ -323,6 +325,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
           ...connection,
           id,
           type: DEFAULT_EDGE_TYPE,
+          zIndex: 1000,
           style: { stroke: 'var(--cs-edge)', strokeWidth: 2 },
           sourceHandle: toDedicatedHandle(connection.sourceHandle, id, 'right'),
           targetHandle: toDedicatedHandle(connection.targetHandle, id, 'left'),

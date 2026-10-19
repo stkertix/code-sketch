@@ -128,7 +128,7 @@ export function EdgeEndpoint({ kind, x, y, position, color = 'var(--cs-edge, #8b
           height: SVG_H,
           transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) rotate(${rot}deg)`,
           pointerEvents: 'none',
-          zIndex: 1,
+          zIndex: 10,
         }}
       >
         <svg
