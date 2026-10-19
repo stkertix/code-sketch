@@ -1,6 +1,6 @@
 import { EdgeLabelRenderer, Position } from '@xyflow/react'
-import { MarkerGlyph } from '@/canvas/edges/MarkerGlyph'
-import type { EdgeMarkerKind } from '@/canvas/edges/markers'
+import { MarkerGlyph } from '@/app/shell/MarkerGlyph'
+import type { EdgeMarkerKind } from '@/diagram/edges'
 
 /** Must match the scale applied when rendering glyphs on the canvas. */
 export const MARKER_SCALE = 0.65

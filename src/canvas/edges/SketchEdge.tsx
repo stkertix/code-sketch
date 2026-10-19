@@ -14,7 +14,7 @@ import {
   type EdgeLineStyle,
   type EdgeMarkerKind,
   type SketchEdgeData,
-} from '@/canvas/edges/markers'
+} from '@/diagram/edges'
 import {
   getOrthogonalEdgePath,
   getSideNesting,

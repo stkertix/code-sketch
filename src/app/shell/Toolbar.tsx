@@ -1,9 +1,6 @@
 import { useRef, useState } from 'react'
-import {
-  downloadText,
-  parseDocument,
-  serializeDocument,
-} from '@/diagram/document'
+import { parseDocument, serializeDocument } from '@/diagram/document'
+import { downloadText } from '@/io/download'
 import { exportPng, exportSvg } from '@/io/image'
 import { useDiagramStore } from '@/diagram/store'
 import { useThemeStore } from '@/app/theme/store'

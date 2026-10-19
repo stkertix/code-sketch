@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Icon } from '@/app/shell/Icon'
 import { IconSelect } from '@/panels/inspector/IconSelect'
-import { MarkerIcon } from '@/canvas/edges/MarkerGlyph'
+import { MarkerIcon } from '@/app/shell/MarkerGlyph'
 import {
   EDGE_LINE_STYLE_OPTIONS,
   EDGE_MARKER_OPTIONS,
   type EdgeLineStyle,
   type EdgeMarkerKind,
-} from '@/canvas/edges/markers'
+} from '@/diagram/edges'
 import { ALL_SHAPE_OPTIONS } from '@/panels/palette/definitions'
 import { SHAPE_ICONS } from '@/panels/palette/shapeIcons'
 import { normalizeAttributeLine } from '@/diagram/entityAttributes'

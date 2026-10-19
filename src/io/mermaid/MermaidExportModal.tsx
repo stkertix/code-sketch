@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { downloadText } from '@/diagram/document'
+import { downloadText } from '@/io/download'
 import { flowToMermaid } from '@/io/mermaid/fromFlow'
 import { useDiagramStore } from '@/diagram/store'
 import { Icon } from '@/app/shell/Icon'

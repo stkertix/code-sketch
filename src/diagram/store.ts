@@ -12,10 +12,11 @@ import { create } from 'zustand'
 import { createEmptyDocument, loadDraft, saveDraft } from '@/diagram/document'
 import { DEFAULT_ENTITY_ATTRIBUTES } from '@/diagram/entityAttributes'
 import {
+  DEFAULT_EDGE_TYPE,
   inferMarkerKind,
   type EdgeMarkerKind,
   type SketchEdgeData,
-} from '@/canvas/edges/markers'
+} from '@/diagram/edges'
 import { DEFAULT_ENTITY_SIZE, DEFAULT_GROUP_SIZE, GRID_SIZE, snapToGrid } from '@/diagram/grid'
 import {
   applyGroupSnap,
@@ -23,11 +24,10 @@ import {
   detachOrphans,
   orderNodesParentsFirst,
 } from '@/diagram/grouping'
+import { toDedicatedHandle, withDedicatedHandles } from '@/diagram/handles'
 import { cloneSnapshot, pushHistory, type Snapshot } from '@/diagram/history'
 import { autoLayoutGraph } from '@/diagram/autoLayout'
 import { createId } from '@/diagram/ids'
-import { DEFAULT_EDGE_TYPE } from '@/panels/palette/definitions'
-import { toDedicatedHandle, withDedicatedHandles } from '@/canvas/edges/routing'
 import type {
   DiagramType,
   ShapeKind,

@@ -72,14 +72,15 @@ src/
     edges/             Edge views, markers, orthogonal routing
 
   diagram/             Domain model & state
-                       (types, store, document, history, grid,
-                        grouping, auto-layout, entity attributes)
+                       (types, store, edges, handles, document, history,
+                        grid, grouping, auto-layout, entity attributes)
 
   panels/              Side panels
     palette/           Shape palette + definitions
     inspector/         Property panel
 
   io/                  Import / export
+    download.ts        Browser file download helper
     image.ts           PNG / SVG
     mermaid/           Mermaid import + export
 

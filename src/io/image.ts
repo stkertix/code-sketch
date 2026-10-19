@@ -1,5 +1,5 @@
 import { toPng, toSvg } from 'html-to-image'
-import { downloadText } from '@/diagram/document'
+import { downloadText } from '@/io/download'
 
 function getExportRoot(): HTMLElement {
   const el = document.querySelector('.react-flow') as HTMLElement | null

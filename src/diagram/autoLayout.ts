@@ -3,7 +3,7 @@ import {
   pickHandleSides,
   toDedicatedHandle,
   type HandleSide,
-} from '@/canvas/edges/routing'
+} from '@/diagram/handles'
 import {
   DEFAULT_ENTITY_LAYOUT_HEIGHT,
   DEFAULT_ENTITY_SIZE,

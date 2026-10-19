@@ -1,4 +1,4 @@
-import type { EdgeMarkerKind } from '@/canvas/edges/markers'
+import type { EdgeMarkerKind } from '@/diagram/edges'
 
 const strokeProps = {
   fill: 'none' as const,

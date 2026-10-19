@@ -1,5 +1,7 @@
 import type { Edge, Node, Viewport } from '@xyflow/react'
-import type { SketchEdgeData } from '@/canvas/edges/markers'
+import type { SketchEdgeData } from '@/diagram/edges'
+
+export type { SketchEdgeData } from '@/diagram/edges'
 
 export type DiagramType = 'flowchart' | 'architecture' | 'erd' | 'uml'
 

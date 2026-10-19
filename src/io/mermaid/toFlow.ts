@@ -1,6 +1,6 @@
 import mermaid from 'mermaid'
-import type { EdgeLineStyle, EdgeMarkerKind } from '@/canvas/edges/markers'
-import { pickHandleSides, toDedicatedHandle } from '@/canvas/edges/routing'
+import type { EdgeLineStyle, EdgeMarkerKind } from '@/diagram/edges'
+import { pickHandleSides, toDedicatedHandle } from '@/diagram/handles'
 import { autoLayoutGraph } from '@/diagram/autoLayout'
 import {
   DEFAULT_ENTITY_ATTRIBUTES,

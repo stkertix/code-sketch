@@ -1,5 +1,5 @@
 import { parseAttributeLines } from '@/diagram/entityAttributes'
-import type { EdgeLineStyle, EdgeMarkerKind } from '@/canvas/edges/markers'
+import type { EdgeLineStyle, EdgeMarkerKind } from '@/diagram/edges'
 import type { DiagramType, SketchEdge, SketchNode } from '@/diagram/types'
 
 function escapeLabel(text: string): string {

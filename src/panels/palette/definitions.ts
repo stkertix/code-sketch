@@ -39,9 +39,6 @@ export const PALETTES: Record<DiagramType, PaletteItem[]> = {
   ],
 }
 
-/** Default edge type for all diagrams — orthogonal (React Flow smoothstep). */
-export const DEFAULT_EDGE_TYPE = 'smoothstep'
-
 /** Unique shapes across all palettes (for inspector shape picker). */
 export const ALL_SHAPE_OPTIONS: PaletteItem[] = (() => {
   const seen = new Set<string>()
