@@ -5,6 +5,8 @@ import {
   type HandleSide,
 } from '@/canvas/edges/routing'
 import {
+  DEFAULT_ENTITY_LAYOUT_HEIGHT,
+  DEFAULT_ENTITY_SIZE,
   DEFAULT_GROUP_SIZE,
   GRID_SIZE,
   snapCeilToGrid,
@@ -35,12 +37,38 @@ function nodeSize(node: SketchNode): { width: number; height: number } {
   const shape = node.data?.shape
   // Decision / connector are fixed in the view but often lack measured size
   // during layout — wrong defaults make side picks (Wait→Ready) U-turn.
-  const fallbackW = shape === 'decision' || shape === 'connector' ? 96 : 160
-  const fallbackH = shape === 'decision' || shape === 'connector' ? 96 : 80
+  let fallbackW = 160
+  let fallbackH = 80
+  if (shape === 'decision' || shape === 'connector') {
+    fallbackW = 96
+    fallbackH = 96
+  } else if (shape === 'group') {
+    fallbackW = DEFAULT_GROUP_SIZE.width
+    fallbackH = DEFAULT_GROUP_SIZE.height
+  } else if (shape === 'entity' || shape === 'class' || shape === 'interface') {
+    fallbackW = DEFAULT_ENTITY_SIZE.width
+    const rows =
+      (node.data.attributes?.length ?? 0) + (node.data.methods?.length ?? 0)
+    // Header + row pitch estimate before the node has been measured in the DOM
+    fallbackH = Math.max(DEFAULT_ENTITY_LAYOUT_HEIGHT, GRID_SIZE * 3 + rows * 22)
+  }
   return {
     width: node.measured?.width ?? node.width ?? styleNumber(style.width, fallbackW),
     height: node.measured?.height ?? node.height ?? styleNumber(style.height, fallbackH),
   }
+}
+
+/** Nesting depth of a node (0 = root). */
+function nestingDepth(nodeId: string, byId: Map<string, SketchNode>): number {
+  let d = 0
+  let n = byId.get(nodeId)
+  const seen = new Set<string>()
+  while (n?.parentId && byId.has(n.parentId) && !seen.has(n.parentId)) {
+    seen.add(n.parentId)
+    d += 1
+    n = byId.get(n.parentId)
+  }
+  return d
 }
 
 function findRootId(nodeId: string, nodes: SketchNode[]): string | null {
@@ -65,10 +93,9 @@ function layoutFlat(
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({
     rankdir: direction,
-    nodesep: GRID_SIZE * 4,
-    // Extra rank gap so bottom→top handles actually face (no U-turn into a
-    // neighbor that still overlaps the source node’s vertical span).
-    ranksep: GRID_SIZE * 8,
+    // Wider gaps so large group boxes (after nested resize) don't kiss/overlap
+    nodesep: GRID_SIZE * 5,
+    ranksep: GRID_SIZE * 10,
     edgesep: GRID_SIZE * 2,
     marginx: GRID_SIZE * 2,
     marginy: GRID_SIZE * 2,
@@ -110,8 +137,55 @@ function edgesWithin(nodes: SketchNode[], edges: SketchEdge[]): SketchEdge[] {
 }
 
 /**
+ * Push overlapping siblings apart (same parent / roots). Mutates positions on a copy.
+ * Prefers the smaller overlap axis so large group boxes clear each other.
+ */
+function separateOverlapping(
+  nodes: SketchNode[],
+  siblingIds: string[],
+  gap = GRID_SIZE * 2,
+): SketchNode[] {
+  if (siblingIds.length < 2) return nodes
+  const idSet = new Set(siblingIds)
+  type Box = { id: string; x: number; y: number; width: number; height: number }
+  const boxes: Box[] = nodes
+    .filter((n) => idSet.has(n.id))
+    .map((n) => {
+      const { width, height } = nodeSize(n)
+      return { id: n.id, x: n.position.x, y: n.position.y, width, height }
+    })
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+
+  let changed = true
+  for (let guard = 0; changed && guard < 24; guard++) {
+    changed = false
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i]
+        const b = boxes[j]
+        const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+        const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+        if (overlapX <= 0 || overlapY <= 0) continue
+        if (overlapX <= overlapY) {
+          b.x = snapToGrid(a.x + a.width + gap)
+        } else {
+          b.y = snapToGrid(a.y + a.height + gap)
+        }
+        changed = true
+      }
+    }
+  }
+
+  const pos = new Map(boxes.map((b) => [b.id, { x: b.x, y: b.y }]))
+  return nodes.map((n) => {
+    const p = pos.get(n.id)
+    return p ? { ...n, position: p } : n
+  })
+}
+
+/**
  * Auto-arrange nodes with Dagre.
- * - Layouts children inside each group, then resizes the group to fit
+ * - Layouts nested groups deepest-first so parent sizes use final child sizes
  * - Layouts top-level nodes (groups included) using cross-group edges
  * - Points edge handles along the layout direction for cleaner routes
  */
@@ -125,38 +199,47 @@ export function autoLayoutGraph(
   const direction = directionFor(diagramType)
   let next = nodes.map((n) => ({ ...n }))
 
-  const childrenByParent = new Map<string, SketchNode[]>()
+  const childrenByParent = new Map<string, string[]>()
   for (const n of next) {
     if (!n.parentId) continue
     const list = childrenByParent.get(n.parentId) ?? []
-    list.push(n)
+    list.push(n.id)
     childrenByParent.set(n.parentId, list)
   }
 
   const pad = GRID_SIZE * 2
+  const byIdFresh = () => new Map(next.map((n) => [n.id, n]))
 
-  for (const [parentId, children] of childrenByParent) {
+  // Deepest parents first — otherwise outer groups size against DEFAULT_GROUP_SIZE
+  // and nested siblings collide once inner groups expand.
+  const parentIds = [...childrenByParent.keys()].sort(
+    (a, b) => nestingDepth(b, byIdFresh()) - nestingDepth(a, byIdFresh()),
+  )
+
+  for (const parentId of parentIds) {
+    const childIds = childrenByParent.get(parentId) ?? []
+    if (childIds.length === 0) continue
+
+    const byId = byIdFresh()
+    const children = childIds.map((id) => byId.get(id)).filter((n): n is SketchNode => !!n)
     if (children.length === 0) continue
+
     const positions = layoutFlat(children, edgesWithin(children, edges), direction)
 
     let minX = Infinity
     let minY = Infinity
-    let maxR = -Infinity
-    let maxB = -Infinity
     for (const c of children) {
       const p = positions.get(c.id)
       if (!p) continue
-      const { width, height } = nodeSize(c)
       minX = Math.min(minX, p.x)
       minY = Math.min(minY, p.y)
-      maxR = Math.max(maxR, p.x + width)
-      maxB = Math.max(maxB, p.y + height)
     }
     if (!Number.isFinite(minX)) continue
 
     const posById = new Map(
       children.map((c) => {
-        const p = positions.get(c.id)!
+        const p = positions.get(c.id)
+        if (!p) return [c.id, c.position] as const
         return [
           c.id,
           {
@@ -171,6 +254,37 @@ export function autoLayoutGraph(
       const p = posById.get(n.id)
       return p ? { ...n, position: p } : n
     })
+
+    next = separateOverlapping(next, childIds, pad)
+
+    // Recompute bounds after separation using latest child sizes
+    const fresh = byIdFresh()
+    let maxR = -Infinity
+    let maxB = -Infinity
+    minX = Infinity
+    minY = Infinity
+    for (const id of childIds) {
+      const c = fresh.get(id)
+      if (!c) continue
+      const { width, height } = nodeSize(c)
+      minX = Math.min(minX, c.position.x)
+      minY = Math.min(minY, c.position.y)
+      maxR = Math.max(maxR, c.position.x + width)
+      maxB = Math.max(maxB, c.position.y + height)
+    }
+    if (!Number.isFinite(minX)) continue
+
+    // Normalize so content sits at pad,pad inside the group
+    const dx = pad - minX
+    const dy = pad - minY
+    if (dx !== 0 || dy !== 0) {
+      const shift = new Set(childIds)
+      next = next.map((n) =>
+        shift.has(n.id)
+          ? { ...n, position: { x: snapToGrid(n.position.x + dx), y: snapToGrid(n.position.y + dy) } }
+          : n,
+      )
+    }
 
     const contentW = maxR - minX + pad * 2
     const contentH = maxB - minY + pad * 2
@@ -207,12 +321,15 @@ export function autoLayoutGraph(
     rootEdges.push({ ...e, id: key, source: srcRoot, target: tgtRoot })
   }
 
-  const rootPositions = layoutFlat(roots, rootEdges, direction)
+  // Fresh sizes for roots (groups already resized)
+  const rootsFresh = roots.map((r) => byIdFresh().get(r.id)!).filter(Boolean)
+  const rootPositions = layoutFlat(rootsFresh, rootEdges, direction)
   next = next.map((n) => {
     if (n.parentId) return n
     const p = rootPositions.get(n.id)
     return p ? { ...n, position: p } : n
   })
+  next = separateOverlapping(next, [...rootIds], GRID_SIZE * 3)
 
   const byId = new Map(next.map((n) => [n.id, n]))
 

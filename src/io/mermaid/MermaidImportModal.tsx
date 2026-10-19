@@ -13,7 +13,14 @@ const SAMPLE_FLOW = `flowchart TD
   decide -->|Yes| work[Do work]
   decide -->|No| wait[Wait]
   wait --> decide
-  work --> done([Done])`
+  work --> done([Done])
+  subgraph prep ["Preparation"]
+    wait
+  end
+  subgraph run ["Execution"]
+    work
+    done
+  end`
 
 const SAMPLE_ER = `erDiagram
     CUSTOMER ||--o{ ORDER : places

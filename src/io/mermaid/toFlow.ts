@@ -1,6 +1,7 @@
 import mermaid from 'mermaid'
 import type { EdgeLineStyle, EdgeMarkerKind } from '@/canvas/edges/markers'
 import { pickHandleSides, toDedicatedHandle } from '@/canvas/edges/routing'
+import { autoLayoutGraph } from '@/diagram/autoLayout'
 import {
   DEFAULT_ENTITY_ATTRIBUTES,
   normalizeAttributeLine,
@@ -8,9 +9,11 @@ import {
 import {
   DEFAULT_ENTITY_LAYOUT_HEIGHT,
   DEFAULT_ENTITY_SIZE,
+  DEFAULT_GROUP_SIZE,
   GRID_SIZE,
   snapToGrid,
 } from '@/diagram/grid'
+import { orderNodesParentsFirst } from '@/diagram/grouping'
 import { createId } from '@/diagram/ids'
 import type { DiagramType, SketchEdge, SketchNode, SketchNodeData } from '@/diagram/types'
 
@@ -269,23 +272,30 @@ function parseFlowEndpoint(
 /**
  * Parse one flowchart statement line into nodes/edges.
  * Supports: `A[Label] -->|yes| B{Ready?}`, `start([Start]) --> done([Done])`, `A --> B`
+ * Returns node ids referenced on the line (for subgraph membership).
  */
 function parseFlowStatement(
   line: string,
   map: Map<string, FlowNodeMeta>,
   edgeList: Array<{ source: string; target: string; label?: string; lineStyle: EdgeLineStyle }>,
-): boolean {
+): string[] {
   let rest = line.trim()
-  if (!rest || rest === 'end') return false
-  if (/^(subgraph|direction|style|classDef|class|linkStyle|click)\b/i.test(rest)) return false
+  if (!rest || rest === 'end') return []
+  if (/^(subgraph|direction|style|classDef|class|linkStyle|click)\b/i.test(rest)) return []
+
+  const touched: string[] = []
 
   // Standalone node declaration: id[Label]
   const alone = parseFlowEndpoint(rest, map)
-  if (alone && alone.rest.trim() === '') return true
+  if (alone && alone.rest.trim() === '') {
+    touched.push(alone.id)
+    return touched
+  }
 
   // Chain: A --> B --> C (consume left-to-right)
   let left = parseFlowEndpoint(rest, map)
-  if (!left) return false
+  if (!left) return []
+  touched.push(left.id)
   rest = left.rest
   let matched = false
 
@@ -297,6 +307,7 @@ function parseFlowStatement(
     rest = edgeLabel.rest
     const right = parseFlowEndpoint(rest, map)
     if (!right) break
+    touched.push(right.id)
     edgeList.push({
       source: left.id,
       target: right.id,
@@ -308,7 +319,54 @@ function parseFlowStatement(
     matched = true
   }
 
-  return matched || alone !== null
+  return matched || alone !== null ? touched : []
+}
+
+type SubgraphMeta = { id: string; label: string; parentId?: string }
+
+/** Sanitize free-text into a Mermaid-safe id fragment. */
+function slugFlowId(raw: string): string {
+  const slug = raw
+    .trim()
+    .replace(/[^\w-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return slug || createId('sg')
+}
+
+/**
+ * Parse `subgraph …` header → group id + label.
+ * Supports: bare id, `id [Title]`, `id ["Title"]`, `"Title"`, free-text title.
+ */
+function parseSubgraphHeader(line: string): { id: string; label: string } | null {
+  const m = line.match(/^subgraph\b\s*(.*)$/i)
+  if (!m) return null
+  const rest = m[1].trim()
+  if (!rest) return { id: createId('sg'), label: 'Group' }
+
+  let hm = rest.match(/^([A-Za-z_][\w-]*)\s*\[\s*"([^"]*)"\s*\]$/)
+  if (hm) return { id: hm[1], label: decodeFlowLabel(hm[2]) || hm[1] }
+
+  hm = rest.match(/^([A-Za-z_][\w-]*)\s*\[\s*([^\]]*)\s*\]$/)
+  if (hm) return { id: hm[1], label: decodeFlowLabel(hm[2]) || hm[1] }
+
+  hm = rest.match(/^"([^"]*)"$/)
+  if (hm) {
+    const label = decodeFlowLabel(hm[1]) || 'Group'
+    return { id: slugFlowId(label), label }
+  }
+
+  hm = rest.match(/^([A-Za-z_][\w-]*)$/)
+  if (hm) return { id: hm[1], label: hm[1] }
+
+  const label = decodeFlowLabel(rest.replace(/^["']|["']$/g, '')) || 'Group'
+  return { id: slugFlowId(label), label }
+}
+
+function flowShapeColor(shape: SketchNodeData['shape']): string {
+  if (shape === 'decision') return '#e8c37a'
+  if (shape === 'startEnd') return '#7dd3a8'
+  if (shape === 'database') return '#8b7ec8'
+  return '#5b8def'
 }
 
 function parseFlowchart(source: string): MermaidImportResult {
@@ -326,40 +384,85 @@ function parseFlowchart(source: string): MermaidImportResult {
     label?: string
     lineStyle: EdgeLineStyle
   }> = []
+  const groupMap = new Map<string, SubgraphMeta>()
+  /** Subgraph membership: last explicit placement inside a subgraph wins. */
+  const nodeParent = new Map<string, string>()
+  const stack: string[] = []
 
   for (const line of lines) {
-    parseFlowStatement(line, nodeMap, edgeList)
+    const sg = parseSubgraphHeader(line)
+    if (sg) {
+      let id = sg.id
+      if (groupMap.has(id)) {
+        let n = 2
+        while (groupMap.has(`${sg.id}_${n}`)) n += 1
+        id = `${sg.id}_${n}`
+      }
+      const parentId = stack[stack.length - 1]
+      groupMap.set(id, { id, label: sg.label, parentId })
+      stack.push(id)
+      continue
+    }
+
+    if (/^end$/i.test(line)) {
+      stack.pop()
+      continue
+    }
+
+    const touched = parseFlowStatement(line, nodeMap, edgeList)
+    const currentGroup = stack[stack.length - 1]
+    if (!currentGroup) continue
+    for (const id of touched) {
+      if (groupMap.has(id)) continue
+      nodeParent.set(id, currentGroup)
+    }
   }
 
-  if (nodeMap.size === 0) {
+  // Subgraph ids are not shape nodes even if referenced by edges
+  for (const gid of groupMap.keys()) nodeMap.delete(gid)
+
+  if (nodeMap.size === 0 && groupMap.size === 0) {
     throw new Error('No flowchart nodes found. Check ids and shape syntax (e.g. A[Label] --> B).')
   }
 
-  const ids = [...nodeMap.keys()]
-  const positions = layoutGrid(ids.length)
-  const nodes = ids.map((id, i) => {
+  const shapeIds = [...nodeMap.keys()]
+  const positions = layoutGrid(Math.max(shapeIds.length, 1))
+  const shapeNodes: SketchNode[] = shapeIds.map((id, i) => {
     const meta = nodeMap.get(id)!
-    const color =
-      meta.shape === 'decision'
-        ? '#e8c37a'
-        : meta.shape === 'startEnd'
-          ? '#7dd3a8'
-          : meta.shape === 'database'
-            ? '#8b7ec8'
-            : '#5b8def'
-    return makeNode(id, positions[i], {
-      label: meta.label,
-      shape: meta.shape,
-      color,
-    })
+    const parentId = nodeParent.get(id)
+    const validParent = parentId && groupMap.has(parentId) ? parentId : undefined
+    return {
+      ...makeNode(id, validParent ? { x: GRID_SIZE * 2, y: GRID_SIZE * 2 } : positions[i], {
+        label: meta.label,
+        shape: meta.shape,
+        color: flowShapeColor(meta.shape),
+      }),
+      parentId: validParent,
+      zIndex: 1,
+    }
   })
 
-  const edges: SketchEdge[] = withGeometricHandles(
-    nodes,
-    edgeList.map((e) => makeEdge(e.source, e.target, e.label, { lineStyle: e.lineStyle })),
-  )
+  const groupNodes: SketchNode[] = [...groupMap.values()].map((g) => ({
+    ...makeNode(
+      g.id,
+      { x: 0, y: 0 },
+      { label: g.label, shape: 'group', color: '#6b7c93' },
+      DEFAULT_GROUP_SIZE,
+    ),
+    parentId: g.parentId && groupMap.has(g.parentId) ? g.parentId : undefined,
+    zIndex: 0,
+  }))
 
-  return { nodes, edges, diagramType: 'flowchart' }
+  const nodes = orderNodesParentsFirst([...groupNodes, ...shapeNodes])
+  const knownIds = new Set(nodes.map((n) => n.id))
+  const rawEdges = edgeList
+    .filter((e) => knownIds.has(e.source) && knownIds.has(e.target))
+    .map((e) => makeEdge(e.source, e.target, e.label, { lineStyle: e.lineStyle }))
+
+  const laid = autoLayoutGraph(nodes, rawEdges, 'flowchart')
+  const edges = withGeometricHandles(laid.nodes, laid.edges)
+
+  return { nodes: laid.nodes, edges, diagramType: 'flowchart' }
 }
 
 /** Map Mermaid ER cardinality token (one side of the relationship) → crow's foot marker. */
@@ -387,23 +490,109 @@ type ErdRelation = {
 function isValidErEntityName(name: string): boolean {
   if (!name) return false
   if (/^[|o{}]+$/i.test(name)) return false
+  if (/^(subgraph|end|erDiagram|direction)$/i.test(name)) return false
   return true
+}
+
+/**
+ * Entity names referenced on one ER line (relationship, bare id, or `Name {`).
+ * Used for subgraph → group membership.
+ */
+function extractErEntityNamesFromLine(line: string): string[] {
+  const trimmed = line.trim()
+  if (!trimmed) return []
+  if (/^(subgraph|end|erDiagram|direction)\b/i.test(trimmed)) return []
+
+  const relRe = new RegExp(
+    `^${ER_ENTITY}\\s+([|o}{]{1,3})(--|\\.\\.)([|o}{]{1,3})\\s+${ER_ENTITY}`,
+  )
+  const rel = trimmed.match(relRe)
+  if (rel) {
+    return [erEntityName(rel[1], rel[2]), erEntityName(rel[6], rel[7])].filter(isValidErEntityName)
+  }
+
+  const blockOpen = trimmed.match(new RegExp(`^${ER_ENTITY}\\s*\\{`))
+  if (blockOpen) {
+    const name = erEntityName(blockOpen[1], blockOpen[2])
+    return isValidErEntityName(name) ? [name] : []
+  }
+
+  const bare = trimmed.match(new RegExp(`^${ER_ENTITY}$`))
+  if (bare) {
+    const name = erEntityName(bare[1], bare[2])
+    return isValidErEntityName(name) ? [name] : []
+  }
+  return []
+}
+
+/** Collect subgraph tree + entity membership; returns content lines without subgraph/end. */
+function collectErdSubgraphs(lines: string[]): {
+  groupMap: Map<string, SubgraphMeta>
+  entityParent: Map<string, string>
+  contentLines: string[]
+} {
+  const groupMap = new Map<string, SubgraphMeta>()
+  const entityParent = new Map<string, string>()
+  const contentLines: string[] = []
+  const stack: string[] = []
+
+  for (const line of lines) {
+    const sg = parseSubgraphHeader(line)
+    if (sg) {
+      let id = sg.id
+      if (groupMap.has(id)) {
+        let n = 2
+        while (groupMap.has(`${sg.id}_${n}`)) n += 1
+        id = `${sg.id}_${n}`
+      }
+      const parentId = stack[stack.length - 1]
+      groupMap.set(id, { id, label: sg.label, parentId })
+      stack.push(id)
+      continue
+    }
+    if (/^end$/i.test(line)) {
+      stack.pop()
+      continue
+    }
+
+    contentLines.push(line)
+    const current = stack[stack.length - 1]
+    if (!current) continue
+    for (const name of extractErEntityNamesFromLine(line)) {
+      if (groupMap.has(name)) continue
+      entityParent.set(name, current)
+    }
+  }
+
+  return { groupMap, entityParent, contentLines }
 }
 
 function parseErd(source: string): MermaidImportResult {
   const text = stripComments(source)
-  const body = text.replace(/^erDiagram\s*/i, '')
+  const allLines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l, i) => !(i === 0 && /^erDiagram\b/i.test(l)))
+
+  const { groupMap, entityParent, contentLines } = collectErdSubgraphs(allLines)
+  const body = contentLines.join('\n')
   const entities = new Map<string, string[]>()
   const relations: ErdRelation[] = []
 
-  // Relationships first: A ||--o{ B : label  |  A }|..|{ B
+  // Bare entities listed inside subgraphs (no relationships yet)
+  for (const name of entityParent.keys()) {
+    if (!entities.has(name)) entities.set(name, [...DEFAULT_ENTITY_ATTRIBUTES])
+  }
+
+  // Relationships: A ||--o{ B : label  |  A }|..|{ B
   // Supports hyphenated ids (LINE-ITEM) and non-identifying `..`
   const relRe = new RegExp(
     `${ER_ENTITY}\\s+([|o}{]{1,3})(--|\\.\\.)([|o}{]{1,3})\\s+${ER_ENTITY}(?:\\s*:\\s*(?:"([^"]*)"|([^\\n]+)))?`,
     'g',
   )
   let relMatch: RegExpExecArray | null
-  while ((relMatch = relRe.exec(text)) !== null) {
+  while ((relMatch = relRe.exec(body)) !== null) {
     const source = erEntityName(relMatch[1], relMatch[2])
     const leftCard = relMatch[3]
     const connector = relMatch[4]
@@ -411,6 +600,7 @@ function parseErd(source: string): MermaidImportResult {
     const target = erEntityName(relMatch[6], relMatch[7])
     const label = (relMatch[8] ?? relMatch[9] ?? '').trim() || undefined
     if (!isValidErEntityName(source) || !isValidErEntityName(target)) continue
+    if (groupMap.has(source) || groupMap.has(target)) continue
 
     if (!entities.has(source)) entities.set(source, [...DEFAULT_ENTITY_ATTRIBUTES])
     if (!entities.has(target)) entities.set(target, [...DEFAULT_ENTITY_ATTRIBUTES])
@@ -432,7 +622,7 @@ function parseErd(source: string): MermaidImportResult {
   let blockMatch: RegExpExecArray | null
   while ((blockMatch = blockRe.exec(body)) !== null) {
     const name = erEntityName(blockMatch[1], blockMatch[2])
-    if (!isValidErEntityName(name)) continue
+    if (!isValidErEntityName(name) || groupMap.has(name)) continue
     const attrs = blockMatch[3]
       .split('\n')
       .map((l) => l.trim())
@@ -442,35 +632,59 @@ function parseErd(source: string): MermaidImportResult {
     entities.set(name, attrs.length ? attrs : [...DEFAULT_ENTITY_ATTRIBUTES])
   }
 
-  if (entities.size === 0) {
+  for (const gid of groupMap.keys()) entities.delete(gid)
+
+  if (entities.size === 0 && groupMap.size === 0) {
     throw new Error('No entities found in erDiagram.')
   }
 
   const ids = [...entities.keys()]
-  const positions = layoutGrid(ids.length, 3)
-  const nodes = ids.map((id, i) =>
-    makeNode(
-      id,
-      positions[i],
-      {
-        label: id,
-        shape: 'entity',
-        color: '#5b8def',
-        attributes: entities.get(id),
-      },
-      DEFAULT_ENTITY_SIZE,
+  const positions = layoutGrid(Math.max(ids.length, 1), 3)
+  const shapeNodes: SketchNode[] = ids.map((id, i) => {
+    const parentId = entityParent.get(id)
+    const validParent = parentId && groupMap.has(parentId) ? parentId : undefined
+    return {
+      ...makeNode(
+        id,
+        validParent ? { x: GRID_SIZE * 2, y: GRID_SIZE * 2 } : positions[i],
+        {
+          label: id,
+          shape: 'entity',
+          color: '#5b8def',
+          attributes: entities.get(id),
+        },
+        DEFAULT_ENTITY_SIZE,
+      ),
+      parentId: validParent,
+      zIndex: 1,
+    }
+  })
+
+  const groupNodes: SketchNode[] = [...groupMap.values()].map((g) => ({
+    ...makeNode(
+      g.id,
+      { x: 0, y: 0 },
+      { label: g.label, shape: 'group', color: '#6b7c93' },
+      DEFAULT_GROUP_SIZE,
     ),
-  )
+    parentId: g.parentId && groupMap.has(g.parentId) ? g.parentId : undefined,
+    zIndex: 0,
+  }))
 
-  const edges: SketchEdge[] = relations.map((r) =>
-    makeEdge(r.source, r.target, r.label, {
-      sourceMarker: r.sourceMarker,
-      targetMarker: r.targetMarker,
-      lineStyle: r.lineStyle,
-    }),
-  )
+  const nodes = orderNodesParentsFirst([...groupNodes, ...shapeNodes])
+  const knownIds = new Set(nodes.map((n) => n.id))
+  const rawEdges = relations
+    .filter((r) => knownIds.has(r.source) && knownIds.has(r.target))
+    .map((r) =>
+      makeEdge(r.source, r.target, r.label, {
+        sourceMarker: r.sourceMarker,
+        targetMarker: r.targetMarker,
+        lineStyle: r.lineStyle,
+      }),
+    )
 
-  return { nodes, edges, diagramType: 'erd' }
+  const laid = autoLayoutGraph(nodes, rawEdges, 'erd')
+  return { nodes: laid.nodes, edges: laid.edges, diagramType: 'erd' }
 }
 
 function parseClassDiagram(source: string): MermaidImportResult {
@@ -573,10 +787,11 @@ export async function mermaidToFlow(source: string): Promise<MermaidImportResult
     await mermaid.parse(trimmed)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Invalid Mermaid syntax.'
-    // Mermaid's flowchart parse can fail in-browser on DOMPurify; our regex
-    // importer still handles the common subset — only hard-fail for ER/UML.
+    // Mermaid's own parser can fail (DOMPurify) or reject extensions we support
+    // (e.g. subgraph inside erDiagram). Our regex importers still handle those.
     const soft =
-      diagramType === 'flowchart' &&
+      diagramType === 'flowchart' ||
+      (diagramType === 'erd' && /\bsubgraph\b/i.test(trimmed)) ||
       (/sanitize/i.test(message) || /DOMPurify/i.test(message))
     if (!soft) throw new Error(message)
   }

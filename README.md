@@ -7,7 +7,7 @@ Visual diagram editor for developers, system analysts, and engineers. Drag shape
 - **Canvas editing** — drag & drop shapes, connect with edges, pan/zoom, undo/redo, duplicate, align
 - **Diagram modes** — Flowchart, Architecture, Entity Relation (ERD), UML Class
 - **Groups** — group containers in every mode; nodes snap into groups when dropped inside
-- **Mermaid import / export** — paste or upload `.mmd` / Markdown; export canvas back to Mermaid (`.mmd` download or copy). Supported: `flowchart`/`graph`, `erDiagram`, `classDiagram` (subset), architecture as flowchart
+- **Mermaid import / export** — paste or upload `.mmd` / Markdown; export canvas back to Mermaid (`.mmd` download or copy). Supported: `flowchart`/`graph`, `erDiagram` (both map `subgraph` → group), `classDiagram` (subset), architecture as flowchart
 - **Local files** — save/open `.codesketch.json`, export PNG/SVG/Mermaid, autosave draft to `localStorage`
 - **Inspector** — edit labels, colors, attributes/methods, edge type / endpoint markers
 - **Themes** — dark and light mode (toolbar toggle; preference saved locally)
