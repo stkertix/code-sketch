@@ -799,6 +799,7 @@ export async function mermaidToFlow(source: string): Promise<MermaidImportResult
 
   switch (diagramType) {
     case 'flowchart':
+    case 'general':
       return parseFlowchart(trimmed)
     case 'erd':
       return parseErd(trimmed)

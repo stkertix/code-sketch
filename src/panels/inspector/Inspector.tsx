@@ -83,24 +83,28 @@ export function Inspector() {
                 className={inputClass}
               />
             </Field>
-            <Field label="Color">
-              <input
-                type="color"
-                value={node.data.color}
-                onFocus={() => takeSnapshot()}
-                onChange={(e) => updateSelectedNode({ color: e.target.value }, { skipHistory: true })}
-                className="h-7 w-full cursor-pointer rounded border border-[var(--cs-border)] bg-transparent"
-              />
-            </Field>
-            <Field label="Shape">
-              <IconSelect
-                aria-label="Shape"
-                value={node.data.shape}
-                options={SHAPE_SELECT_OPTIONS}
-                onOpen={takeSnapshot}
-                onChange={(shape) => setSelectedNodeShape(shape, { skipHistory: true })}
-              />
-            </Field>
+            <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-1.5">
+              <Field label="Color">
+                <input
+                  type="color"
+                  value={node.data.color}
+                  onFocus={() => takeSnapshot()}
+                  onChange={(e) =>
+                    updateSelectedNode({ color: e.target.value }, { skipHistory: true })
+                  }
+                  className="h-7 w-full cursor-pointer rounded border border-[var(--cs-border)] bg-transparent"
+                />
+              </Field>
+              <Field label="Shape">
+                <IconSelect
+                  aria-label="Shape"
+                  value={node.data.shape}
+                  options={SHAPE_SELECT_OPTIONS}
+                  onOpen={takeSnapshot}
+                  onChange={(shape) => setSelectedNodeShape(shape, { skipHistory: true })}
+                />
+              </Field>
+            </div>
             {supportsAttributes(node.data.shape) ? (
               <LinesField
                 key={`${node.id}-attrs`}
@@ -305,7 +309,7 @@ function EndpointControls({
   onMarker: (kind: EdgeMarkerKind) => void
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-1.5">
       <select
         value={side}
         aria-label="Side"

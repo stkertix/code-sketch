@@ -282,8 +282,8 @@ export function flowToMermaid(
       return exportUml(nodes, edges)
     case 'architecture':
       return exportFlowchartLike(nodes, edges, 'LR', 'flowchart')
+    case 'general':
     case 'flowchart':
-    default:
       return exportFlowchartLike(nodes, edges, 'TD', 'flowchart')
   }
 }

@@ -5,7 +5,7 @@ Visual diagram editor for developers, system analysts, and engineers. Drag shape
 ## Features
 
 - **Canvas editing** — drag & drop shapes, connect with edges, pan/zoom, undo/redo, duplicate, align
-- **Diagram modes** — Flowchart, Architecture, Entity Relation (ERD), UML Class
+- **Diagram modes** — General (box / connector / group), Flowchart, Architecture, Entity Relation (ERD), UML Class
 - **Groups** — group containers in every mode; nodes snap into groups when dropped inside
 - **Diagrams panel** — list canvas items nested under groups; tick to show/hide on the preview
 - **Mermaid import / export** — paste or upload `.mmd` / Markdown; export canvas back to Mermaid (`.mmd` download or copy). Supported: `flowchart`/`graph`, `erDiagram` (both map `subgraph` → group), `classDiagram` (subset), architecture as flowchart
@@ -97,7 +97,7 @@ Projects are saved as JSON (`.codesketch.json`) with:
 {
   version: 1,
   name: string,
-  diagramType: 'flowchart' | 'architecture' | 'erd' | 'uml',
+  diagramType: 'general' | 'flowchart' | 'architecture' | 'erd' | 'uml',
   nodes: Node[],
   edges: Edge[],
   viewport: { x, y, zoom }

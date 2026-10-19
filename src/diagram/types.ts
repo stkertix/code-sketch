@@ -3,7 +3,7 @@ import type { SketchEdgeData } from '@/diagram/edges'
 
 export type { SketchEdgeData } from '@/diagram/edges'
 
-export type DiagramType = 'flowchart' | 'architecture' | 'erd' | 'uml'
+export type DiagramType = 'general' | 'flowchart' | 'architecture' | 'erd' | 'uml'
 
 export type ShapeKind =
   | 'process'
