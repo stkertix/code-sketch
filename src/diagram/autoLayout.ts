@@ -361,8 +361,11 @@ export function autoLayoutGraph(
       src && tgt
         ? pickHandleSides(src, tgt)
         : { source: fallbackSource, target: fallbackTarget }
+    const data = { ...e.data }
+    delete data.waypoints
     return {
       ...e,
+      data,
       sourceHandle: toDedicatedHandle(sides.source, e.id, sides.source),
       targetHandle: toDedicatedHandle(sides.target, e.id, sides.target),
     }

@@ -38,11 +38,24 @@ export function dedicatedHandleId(side: HandleSide, edgeId: string): string {
   return `${side}:${edgeId}`
 }
 
+/** Grid connector along a side, e.g. `right:g48`. */
+export function gridHandleId(side: HandleSide, offsetPx: number): string {
+  return `${side}:g${offsetPx}`
+}
+
+const GRID_HANDLE_RE = /^(top|right|bottom|left):g(\d+)$/
+
+export function isGridHandle(handle: string | null | undefined): boolean {
+  return !!handle && GRID_HANDLE_RE.test(handle)
+}
+
 export function toDedicatedHandle(
   handle: string | null | undefined,
   edgeId: string,
   fallback: HandleSide = 'right',
 ): string {
+  // Keep user-picked grid attachment points instead of remapping to edge-id ports.
+  if (isGridHandle(handle)) return handle as string
   const side = sideFromHandle(handle) ?? fallback
   return dedicatedHandleId(side, edgeId)
 }

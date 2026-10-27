@@ -29,6 +29,7 @@ import { collectGroupMemberIds } from '@/diagram/layers'
 import { cloneSnapshot, pushHistory, type Snapshot } from '@/diagram/history'
 import { autoLayoutGraph } from '@/diagram/autoLayout'
 import { createId } from '@/diagram/ids'
+import { normalizeDiagramText } from '@/diagram/labels'
 import type {
   DiagramType,
   ShapeKind,
@@ -85,6 +86,16 @@ type DiagramState = {
     opts?: UpdateOpts,
   ) => void
   setEdgeLabelT: (edgeId: string, labelT: number, opts?: UpdateOpts) => void
+  setEdgeLabelPlacement: (
+    edgeId: string,
+    placement: { labelT: number; labelOffset: number },
+    opts?: UpdateOpts,
+  ) => void
+  setEdgeWaypoints: (
+    edgeId: string,
+    waypoints: Array<{ x: number; y: number }> | undefined,
+    opts?: UpdateOpts,
+  ) => void
   setSelection: (nodeId: string | null, edgeId: string | null) => void
   selectAll: () => void
   deleteSelected: () => void
@@ -198,11 +209,18 @@ function normalizeEdges(edges: SketchEdge[]): SketchEdge[] {
       e.data?.targetMarker ??
       (e.markerEnd ? inferMarkerKind(e.markerEnd, 'arrow') : 'arrow')
 
+    const rawLabel = typeof e.label === 'string' ? e.label : undefined
+    const label =
+      rawLabel == null || rawLabel === ''
+        ? rawLabel
+        : normalizeDiagramText(rawLabel)
+
     return withDedicatedHandles(
       withMarkers(
         {
           ...e,
           type,
+          ...(label !== undefined ? { label } : {}),
           // Keep edges above nodes within the RF edge layer
           zIndex: e.zIndex ?? 1000,
           style: { stroke: 'var(--cs-edge)', strokeWidth: 2, ...e.style },
@@ -217,6 +235,7 @@ function normalizeEdges(edges: SketchEdge[]): SketchEdge[] {
 /**
  * Drop locked height on attribute cards so they reflow with content.
  * Also clear extent:'parent' (traps nodes inside groups) and keep parents first.
+ * Decode Mermaid-ish labels (`"…"`, `<br/>`) into real multiline text.
  */
 function normalizeNodes(nodes: SketchNode[]): SketchNode[] {
   const cleaned = nodes.map((n) => {
@@ -224,6 +243,17 @@ function normalizeNodes(nodes: SketchNode[]): SketchNode[] {
     // Legacy docs may have extent:'parent', which prevents dragging out of a group
     if (n.extent === 'parent') {
       next = { ...next, extent: undefined }
+    }
+    const rawLabel = next.data?.label
+    const label = normalizeDiagramText(rawLabel)
+    if (label !== (rawLabel ?? '')) {
+      next = {
+        ...next,
+        data: { ...next.data, label },
+        width: undefined,
+        height: undefined,
+        measured: undefined,
+      }
     }
     const shape = next.data?.shape
     if (shape !== 'entity' && shape !== 'class' && shape !== 'interface') return next
@@ -382,6 +412,10 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   },
 
   onReconnect: (oldEdge, connection) => {
+    // Require an explicit selection so dimmed / background edges can't be yanked.
+    const current = get().edges.find((e) => e.id === oldEdge.id)
+    if (!current?.selected && get().selectedEdgeId !== oldEdge.id) return
+
     get().takeSnapshot()
     const id = oldEdge.id
     const next: Connection = {
@@ -389,7 +423,15 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
       sourceHandle: toDedicatedHandle(connection.sourceHandle, id, 'right'),
       targetHandle: toDedicatedHandle(connection.targetHandle, id, 'left'),
     }
-    set({ edges: reconnectEdge(oldEdge, next, get().edges).map(withDedicatedHandles) })
+    set({
+      edges: reconnectEdge(oldEdge, next, get().edges).map((e) => {
+        const dedicated = withDedicatedHandles(e)
+        if (dedicated.id !== id) return dedicated
+        const data = { ...dedicated.data }
+        delete data.waypoints
+        return { ...dedicated, data }
+      }),
+    })
     get().persistDraft()
   },
 
@@ -556,6 +598,42 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
           ? { ...e, data: { ...e.data, labelT } }
           : e,
       ),
+    })
+    if (!opts?.skipHistory) get().persistDraft()
+  },
+
+  setEdgeLabelPlacement: (edgeId, placement, opts) => {
+    if (!opts?.skipHistory) get().takeSnapshot()
+    set({
+      edges: get().edges.map((e) =>
+        e.id === edgeId
+          ? {
+              ...e,
+              data: {
+                ...e.data,
+                labelT: placement.labelT,
+                labelOffset: placement.labelOffset,
+              },
+            }
+          : e,
+      ),
+    })
+    if (!opts?.skipHistory) get().persistDraft()
+  },
+
+  setEdgeWaypoints: (edgeId, waypoints, opts) => {
+    if (!opts?.skipHistory) get().takeSnapshot()
+    set({
+      edges: get().edges.map((e) => {
+        if (e.id !== edgeId) return e
+        const data = { ...e.data }
+        if (!waypoints || waypoints.length === 0) {
+          delete data.waypoints
+        } else {
+          data.waypoints = waypoints.map((p) => ({ x: p.x, y: p.y }))
+        }
+        return { ...e, data }
+      }),
     })
     if (!opts?.skipHistory) get().persistDraft()
   },

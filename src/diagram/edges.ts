@@ -18,12 +18,24 @@ export type EdgeMarkerKind =
 
 export type EdgeLineStyle = 'solid' | 'dashed' | 'dotted'
 
+export type EdgeWaypoint = { x: number; y: number }
+
 export type SketchEdgeData = {
   sourceMarker?: EdgeMarkerKind
   targetMarker?: EdgeMarkerKind
   lineStyle?: EdgeLineStyle
   /** Label position along the edge path, 0 = source … 1 = target. */
   labelT?: number
+  /**
+   * Signed perpendicular offset of the label center from the stroke (flow px).
+   * Clamped so the gap from the stroke to the nearest label edge is ≤ 1 grid.
+   */
+  labelOffset?: number
+  /**
+   * Manual orthogonal bends between source and target handles.
+   * When set, auto-routing is skipped and these interior points are used.
+   */
+  waypoints?: EdgeWaypoint[]
 }
 
 /** Default React Flow edge type for all diagrams (orthogonal smoothstep). */

@@ -13,6 +13,7 @@ import {
   type OnSelectionChangeParams,
 } from '@xyflow/react'
 import { useCallback, useEffect, useMemo, useRef, type DragEvent, type PointerEvent } from 'react'
+import { ConnectionHighlightProvider } from '@/canvas/connectionHighlight'
 import { blurActiveTextEditor } from '@/canvas/useKeyboardShortcuts'
 import { SketchEdge as SketchEdgeView } from '@/canvas/edges/SketchEdge'
 import { Icon } from '@/app/shell/Icon'
@@ -137,12 +138,20 @@ function CanvasInner() {
 
   const empty = nodes.length === 0
 
+  // Only selected edges can be reattached to another connector — dimmed /
+  // unselected edges stay put when dragging near node handles.
+  const flowEdges = useMemo(
+    () => edges.map((e) => ({ ...e, reconnectable: !!e.selected })),
+    [edges],
+  )
+
   const proOptions = useMemo(() => ({ hideAttribution: true }), [])
   const defaultEdgeOptions = useMemo(
     () => ({
       type: DEFAULT_EDGE_TYPE,
       zIndex: 1000,
       style: { stroke: 'var(--cs-edge)', strokeWidth: 2 },
+      reconnectable: false,
     }),
     [],
   )
@@ -168,7 +177,7 @@ function CanvasInner() {
     >
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={flowEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
@@ -241,7 +250,9 @@ function CanvasInner() {
 export function DiagramCanvas() {
   return (
     <ReactFlowProvider>
-      <CanvasInner />
+      <ConnectionHighlightProvider>
+        <CanvasInner />
+      </ConnectionHighlightProvider>
     </ReactFlowProvider>
   )
 }

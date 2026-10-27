@@ -80,7 +80,8 @@ button,
 input,
 textarea,
 select {
-  font: inherit;
+  /* Don't use `font` shorthand — it overrides Tailwind text-* size utilities */
+  font-family: inherit;
   color: inherit;
 }
 

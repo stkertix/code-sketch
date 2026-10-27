@@ -15,6 +15,7 @@ import {
 } from '@/diagram/grid'
 import { orderNodesParentsFirst } from '@/diagram/grouping'
 import { createId } from '@/diagram/ids'
+import { normalizeDiagramText } from '@/diagram/labels'
 import type { DiagramType, SketchEdge, SketchNode, SketchNodeData } from '@/diagram/types'
 
 /** Attach source/target handles from node geometry so routes stay short. */
@@ -147,13 +148,7 @@ type FlowNodeMeta = { label: string; shape: SketchNodeData['shape'] }
 
 /** Decode common Mermaid label escapes. */
 function decodeFlowLabel(raw: string): string {
-  return raw
-    .replace(/#quot;/gi, '"')
-    .replace(/#39;/g, "'")
-    .replace(/#lt;/gi, '<')
-    .replace(/#gt;/gi, '>')
-    .replace(/#amp;/gi, '&')
-    .trim()
+  return normalizeDiagramText(raw)
 }
 
 /**

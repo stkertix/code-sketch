@@ -106,12 +106,21 @@ type Props = {
   y: number
   position: Position
   color?: string
+  /** Grey-out when outside the selection neighborhood. */
+  dimmed?: boolean
 }
 
 /**
  * Renders endpoint in the edge-label overlay layer so it always paints above nodes.
  */
-export function EdgeEndpoint({ kind, x, y, position, color = 'var(--cs-edge, #8b95a8)' }: Props) {
+export function EdgeEndpoint({
+  kind,
+  x,
+  y,
+  position,
+  color = 'var(--cs-edge, #8b95a8)',
+  dimmed = false,
+}: Props) {
   if (!kind || kind === 'none') return null
   const pos = insetFromNode(x, y, position, getMarkerInset(kind))
   const rot = rotationFor(position)
@@ -129,6 +138,8 @@ export function EdgeEndpoint({ kind, x, y, position, color = 'var(--cs-edge, #8b
           transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) rotate(${rot}deg)`,
           pointerEvents: 'none',
           zIndex: 10,
+          opacity: dimmed ? 0.22 : undefined,
+          filter: dimmed ? 'grayscale(0.55)' : undefined,
         }}
       >
         <svg

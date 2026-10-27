@@ -11,8 +11,45 @@ import {
 import { ALL_SHAPE_OPTIONS } from '@/panels/palette/definitions'
 import { SHAPE_ICONS } from '@/panels/palette/shapeIcons'
 import { normalizeAttributeLine } from '@/diagram/entityAttributes'
+import {
+  LABEL_ALIGN_X_OPTIONS,
+  LABEL_ALIGN_Y_OPTIONS,
+  resolveLabelAlignX,
+  resolveLabelAlignY,
+} from '@/diagram/labelAlign'
+import { useUiStore } from '@/app/ui/store'
 import { useDiagramStore } from '@/diagram/store'
-import type { ShapeKind } from '@/diagram/types'
+import type { LabelAlignX, LabelAlignY, ShapeKind } from '@/diagram/types'
+
+function AlignIcon({ kind }: { kind: LabelAlignX | LabelAlignY }) {
+  // Compact glyphs: H = uneven lines flush left/center/right; V = bars top/mid/bottom
+  if (kind === 'left' || kind === 'center' || kind === 'right') {
+    const widths = [10, 7, 10]
+    return (
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="block">
+        {widths.map((w, i) => (
+          <rect
+            key={i}
+            x={kind === 'right' ? 14 - 2 - w : kind === 'center' ? (14 - w) / 2 : 2}
+            y={2.5 + i * 3.2}
+            width={w}
+            height="2"
+            rx="0.5"
+            fill="currentColor"
+          />
+        ))}
+      </svg>
+    )
+  }
+  const y0 = kind === 'top' ? 2 : kind === 'bottom' ? 6.5 : 4.25
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="block">
+      <rect x="2" y={y0} width="10" height="1.75" rx="0.5" fill="currentColor" />
+      <rect x="3.5" y={y0 + 2.75} width="7" height="1.75" rx="0.5" fill="currentColor" />
+      <rect x="2" y={y0 + 5.5} width="10" height="1.75" rx="0.5" fill="currentColor" />
+    </svg>
+  )
+}
 
 function supportsAttributes(shape: ShapeKind): boolean {
   return shape === 'entity' || shape === 'class' || shape === 'interface'
@@ -66,21 +103,18 @@ export function Inspector() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-2.5 py-2">
-        {!node && !edge ? (
-          <p className="text-xs text-[var(--cs-muted)]">
-            Select a shape or connector to edit its properties.
-          </p>
-        ) : null}
+        {!node && !edge ? <GeneralSettings /> : null}
 
         {node ? (
           <div className="flex flex-col gap-2">
             <Field label="Label">
-              <input
+              <textarea
                 value={node.data.label}
+                rows={Math.min(3, Math.max(2, (node.data.label.match(/\n/g)?.length ?? 0) + 1))}
                 onFocus={() => takeSnapshot()}
                 onKeyDown={(e) => e.stopPropagation()}
                 onChange={(e) => updateSelectedNode({ label: e.target.value }, { skipHistory: true })}
-                className={inputClass}
+                className={labelTextareaClass}
               />
             </Field>
             <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-1.5">
@@ -103,6 +137,62 @@ export function Inspector() {
                   onOpen={takeSnapshot}
                   onChange={(shape) => setSelectedNodeShape(shape, { skipHistory: true })}
                 />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Field label="Align H">
+                <div
+                  className={alignGroupClass}
+                  role="group"
+                  aria-label="Horizontal label align"
+                >
+                  {LABEL_ALIGN_X_OPTIONS.map((opt) => {
+                    const active = resolveLabelAlignX(node.data) === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        title={opt.label}
+                        aria-label={opt.label}
+                        aria-pressed={active}
+                        onClick={() => {
+                          takeSnapshot()
+                          updateSelectedNode({ labelAlignX: opt.value }, { skipHistory: true })
+                        }}
+                        className={`${alignBtnClass} ${active ? alignBtnActiveClass : ''}`}
+                      >
+                        <AlignIcon kind={opt.value} />
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+              <Field label="Align V">
+                <div
+                  className={alignGroupClass}
+                  role="group"
+                  aria-label="Vertical label align"
+                >
+                  {LABEL_ALIGN_Y_OPTIONS.map((opt) => {
+                    const active = resolveLabelAlignY(node.data) === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        title={opt.label}
+                        aria-label={opt.label}
+                        aria-pressed={active}
+                        onClick={() => {
+                          takeSnapshot()
+                          updateSelectedNode({ labelAlignY: opt.value }, { skipHistory: true })
+                        }}
+                        className={`${alignBtnClass} ${active ? alignBtnActiveClass : ''}`}
+                      >
+                        <AlignIcon kind={opt.value} />
+                      </button>
+                    )
+                  })}
+                </div>
               </Field>
             </div>
             {supportsAttributes(node.data.shape) ? (
@@ -145,13 +235,22 @@ export function Inspector() {
         {edge && !node ? (
           <div className="flex flex-col gap-2">
             <Field label="Label">
-              <input
+              <textarea
                 value={typeof edge.label === 'string' ? edge.label : ''}
+                rows={Math.min(
+                  3,
+                  Math.max(
+                    2,
+                    ((typeof edge.label === 'string' ? edge.label : '').match(/\n/g)?.length ?? 0) +
+                      1,
+                  ),
+                )}
                 onFocus={() => takeSnapshot()}
+                onKeyDown={(e) => e.stopPropagation()}
                 onChange={(e) =>
                   updateSelectedEdge({ label: e.target.value }, { skipHistory: true })
                 }
-                className={inputClass}
+                className={labelTextareaClass}
               />
             </Field>
             <div className="grid grid-cols-2 gap-1.5">
@@ -340,6 +439,51 @@ function EndpointControls({
   )
 }
 
+function GeneralSettings() {
+  const showDotGrid = useUiStore((s) => s.showDotGrid)
+  const setShowDotGrid = useUiStore((s) => s.setShowDotGrid)
+  const showEdgeArcs = useUiStore((s) => s.showEdgeArcs)
+  const setShowEdgeArcs = useUiStore((s) => s.setShowEdgeArcs)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] uppercase tracking-wider text-[var(--cs-muted)]">General</p>
+      <ToggleRow
+        label="Show grid"
+        checked={showDotGrid}
+        onChange={setShowDotGrid}
+      />
+      <ToggleRow
+        label="Show arc line"
+        checked={showEdgeArcs}
+        onChange={setShowEdgeArcs}
+      />
+    </div>
+  )
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (next: boolean) => void
+}) {
+  return (
+    <label className="flex h-7 cursor-pointer items-center justify-between gap-2 rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-2 text-xs text-[var(--cs-text)]">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-3.5 w-3.5 accent-[var(--cs-accent)]"
+      />
+    </label>
+  )
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="block">
@@ -355,4 +499,16 @@ const inputClass =
   'h-7 w-full rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 text-xs outline-none focus:border-[var(--cs-accent)]'
 
 const textareaClass =
-  'w-full rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 py-1 text-xs leading-snug outline-none focus:border-[var(--cs-accent)]'
+  'w-full rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 py-0.5 text-[11px] leading-snug outline-none focus:border-[var(--cs-accent)]'
+
+const labelTextareaClass =
+  'min-h-[2.5rem] w-full resize-y rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)] px-1.5 py-1 text-[10px] leading-snug outline-none focus:border-[var(--cs-accent)] [font-size:10px]'
+
+const alignGroupClass =
+  'flex h-7 w-full overflow-hidden rounded border border-[var(--cs-border)] bg-[var(--cs-surface-2)]'
+
+const alignBtnClass =
+  'flex h-full flex-1 items-center justify-center text-[var(--cs-muted)] transition-colors hover:bg-[var(--cs-surface)] hover:text-[var(--cs-text)]'
+
+const alignBtnActiveClass =
+  'bg-[var(--cs-accent)] text-[var(--cs-on-shape)] hover:bg-[var(--cs-accent)] hover:text-[var(--cs-on-shape)]'

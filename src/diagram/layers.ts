@@ -22,11 +22,16 @@ export type DiagramGroupRow = {
 
 export type DiagramTreeRow = DiagramGroupRow | DiagramItemRow
 
+function listLabel(raw: string | undefined, fallback: string): string {
+  const text = raw?.replace(/\s*\n\s*/g, ' ').trim()
+  return text || fallback
+}
+
 function toItem(n: SketchNode): DiagramItemRow {
   return {
     kind: 'item',
     id: n.id,
-    label: n.data.label?.trim() || n.id,
+    label: listLabel(n.data.label, n.id),
     shape: n.data.shape,
     visible: !n.hidden,
   }

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { GRID_SIZE, snapToGrid } from '@/diagram/grid'
 import {
   dedicatedHandleId,
+  isGridHandle,
   sideFromHandle,
   type HandleSide,
 } from '@/diagram/handles'
@@ -10,7 +11,9 @@ import {
 // Re-export domain handle helpers so canvas consumers can import from one place.
 export {
   dedicatedHandleId,
+  gridHandleId,
   HANDLE_SIDES,
+  isGridHandle,
   pickHandleSides,
   positionFromSide,
   sideFromHandle,
@@ -23,10 +26,13 @@ export {
 export const PAIR_LANE_GAP = GRID_SIZE * 2
 
 /** Short leave-node stub before the first bend. */
-const STUB = GRID_SIZE * 2
+const STUB = GRID_SIZE
 
-/** Minimum gap between a corridor and a node edge (no “sticking”). */
-const CLEARANCE = GRID_SIZE * 2
+/**
+ * Mid-path gap between a corridor and any node face (1 grid).
+ * Tip/handle attachment stays on the border; this only affects the line body.
+ */
+const CLEARANCE = GRID_SIZE
 
 /** If handle axes are this close, treat as aligned (nearly straight). */
 const ALIGN_EPS = GRID_SIZE
@@ -90,8 +96,37 @@ export type SidePort = {
 }
 
 /**
+ * Pixel offsets along a side for connector dots on every grid step
+ * (1-grid margin from each corner).
+ */
+export function gridPortOffsets(sideLength: number): number[] {
+  const margin = GRID_SIZE
+  if (sideLength <= margin * 2) {
+    return [Math.min(sideLength - margin, Math.max(margin, snapToGrid(sideLength / 2)))]
+  }
+  const offsets: number[] = []
+  for (let o = margin; o <= sideLength - margin + 0.5; o += GRID_SIZE) {
+    offsets.push(o)
+  }
+  return offsets
+}
+
+function handleOnNodeSide(edge: Edge, nodeId: string, side: HandleSide): string | null | undefined {
+  if (edge.source === nodeId && sideFromHandle(edge.sourceHandle) === side) {
+    return edge.sourceHandle
+  }
+  if (edge.target === nodeId && sideFromHandle(edge.targetHandle) === side) {
+    return edge.targetHandle
+  }
+  return null
+}
+
+/**
  * Place dedicated side ports so consecutive markers are exactly one grid apart,
  * centered on the side when they fit (clamped into the side margins otherwise).
+ *
+ * Edges already pinned to a grid handle (`side:gN`) are skipped — those use the
+ * permanent grid connector dots instead.
  *
  * When `overlap` is true (flowchart), every port shares the side center so
  * converging edges like Start→Ready and Wait→Ready may stack on one point.
@@ -103,7 +138,10 @@ export function getSidePortLayout(
   side: HandleSide,
   overlap = false,
 ): SidePort[] {
-  const group = sortEdgesOnSide(edgesOnSide(edges, nodeId, side), nodes, nodeId, side)
+  const onSide = edgesOnSide(edges, nodeId, side).filter(
+    (e) => !isGridHandle(handleOnNodeSide(e, nodeId, side)),
+  )
+  const group = sortEdgesOnSide(onSide, nodes, nodeId, side)
   if (group.length === 0) return []
 
   const node = nodes.find((n) => n.id === nodeId)
@@ -212,7 +250,7 @@ export function offsetEndpoints(
   }
 }
 
-type Pt = { x: number; y: number }
+export type Pt = { x: number; y: number }
 
 function isH(p: Position): boolean {
   return p === Position.Left || p === Position.Right
@@ -429,7 +467,7 @@ function sideAwareWaypoints(
  * Collapse collinear points and sub-grid stair jogs so rounded corners
  * don't turn a simple Z into a wavy S.
  */
-function simplifyOrth(points: Pt[], epsilon = GRID_SIZE / 2): Pt[] {
+export function simplifyOrth(points: Pt[], epsilon = GRID_SIZE / 2): Pt[] {
   if (points.length < 2) return points
 
   // Drop zero-length segments
@@ -485,7 +523,7 @@ function simplifyOrth(points: Pt[], epsilon = GRID_SIZE / 2): Pt[] {
   return out
 }
 
-function pointsToPath(points: Pt[], borderRadius: number): string {
+export function pointsToPath(points: Pt[], borderRadius: number): string {
   if (points.length === 0) return ''
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
   if (borderRadius <= 0 || points.length === 2) {
@@ -552,8 +590,17 @@ function inflate(r: ObstacleRect, pad: number): ObstacleRect {
   }
 }
 
-/** True if an orthogonal segment overlaps a rect (touching counts). */
-function segmentHitsRect(a: Pt, b: Pt, r: ObstacleRect): boolean {
+/**
+ * True if an orthogonal segment overlaps a rect.
+ * `exclusive` — open bounds so a corridor exactly CLEARANCE outside a node
+ * (on the inflated pad edge) is allowed, not treated as sticking.
+ */
+function segmentHitsRect(
+  a: Pt,
+  b: Pt,
+  r: ObstacleRect,
+  exclusive = false,
+): boolean {
   const x1 = r.x
   const y1 = r.y
   const x2 = r.x + r.width
@@ -561,17 +608,17 @@ function segmentHitsRect(a: Pt, b: Pt, r: ObstacleRect): boolean {
 
   if (Math.abs(a.y - b.y) < 0.5) {
     const y = a.y
-    if (y < y1 || y > y2) return false
+    if (exclusive ? y <= y1 || y >= y2 : y < y1 || y > y2) return false
     const lo = Math.min(a.x, b.x)
     const hi = Math.max(a.x, b.x)
-    return hi >= x1 && lo <= x2
+    return exclusive ? hi > x1 && lo < x2 : hi >= x1 && lo <= x2
   }
   if (Math.abs(a.x - b.x) < 0.5) {
     const x = a.x
-    if (x < x1 || x > x2) return false
+    if (exclusive ? x <= x1 || x >= x2 : x < x1 || x > x2) return false
     const lo = Math.min(a.y, b.y)
     const hi = Math.max(a.y, b.y)
-    return hi >= y1 && lo <= y2
+    return exclusive ? hi > y1 && lo < y2 : hi >= y1 && lo <= y2
   }
   return false
 }
@@ -589,6 +636,7 @@ function segmentHitsInterior(a: Pt, b: Pt, r: ObstacleRect, inset = 4): boolean 
 
 /**
  * Flush run along a node side (middle segments only) — the “menempel” case.
+ * Distance must be >= pad (1 grid); closer than that scores as a hit.
  */
 function sideFlushHits(
   points: Pt[],
@@ -602,15 +650,19 @@ function sideFlushHits(
     const a = points[i]
     const b = points[i + 1]
     if (Math.abs(a.y - b.y) < 0.5) {
-      // horizontal — too close to top/bottom
-      if (Math.abs(a.y - rect.y) < pad || Math.abs(a.y - (rect.y + rect.height)) < pad) {
+      // horizontal — closer than `pad` to top/bottom face
+      const dTop = Math.abs(a.y - rect.y)
+      const dBot = Math.abs(a.y - (rect.y + rect.height))
+      if (dTop < pad || dBot < pad) {
         const lo = Math.min(a.x, b.x)
         const hi = Math.max(a.x, b.x)
         if (hi > rect.x - pad && lo < rect.x + rect.width + pad) hits += 1
       }
     } else if (Math.abs(a.x - b.x) < 0.5) {
-      // vertical — too close to left/right
-      if (Math.abs(a.x - rect.x) < pad || Math.abs(a.x - (rect.x + rect.width)) < pad) {
+      // vertical — closer than `pad` to left/right face
+      const dLeft = Math.abs(a.x - rect.x)
+      const dRight = Math.abs(a.x - (rect.x + rect.width))
+      if (dLeft < pad || dRight < pad) {
         const lo = Math.min(a.y, b.y)
         const hi = Math.max(a.y, b.y)
         if (hi > rect.y - pad && lo < rect.y + rect.height + pad) hits += 1
@@ -622,7 +674,7 @@ function sideFlushHits(
 
 /**
  * Count crossings: other nodes (padded), endpoint interiors (through-body),
- * and flush runs along endpoint sides.
+ * and flush runs along any nearby node sides.
  */
 function pathObstacleHits(
   points: Pt[],
@@ -635,10 +687,14 @@ function pathObstacleHits(
     const a = points[i]
     const b = points[i + 1]
     for (const raw of obstacles) {
-      if (segmentHitsRect(a, b, inflate(raw, OBSTACLE_PAD))) hits += 1
+      // Exclusive: corridor exactly CLEARANCE outside the node is fine
+      if (segmentHitsRect(a, b, inflate(raw, OBSTACLE_PAD), true)) hits += 1
     }
     if (endpoints.source && segmentHitsInterior(a, b, endpoints.source)) hits += 1
     if (endpoints.target && segmentHitsInterior(a, b, endpoints.target)) hits += 1
+  }
+  for (const raw of obstacles) {
+    hits += sideFlushHits(points, raw, CLEARANCE)
   }
   if (endpoints.source) hits += sideFlushHits(points, endpoints.source, CLEARANCE)
   if (endpoints.target) hits += sideFlushHits(points, endpoints.target, CLEARANCE)
@@ -1028,6 +1084,260 @@ function selfLoopWaypoints(
   ])
 }
 
+/** Interior bends only (excludes current source/target handle positions). */
+export function interiorWaypoints(points: Pt[]): Pt[] {
+  if (points.length <= 2) return []
+  return points.slice(1, -1).map((p) => ({ x: p.x, y: p.y }))
+}
+
+/**
+ * Build a full orthogonal polyline from stored interior waypoints.
+ * Re-anchors ends to the current handles and restores H/V segments if nodes moved.
+ */
+export function pointsFromWaypoints(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  waypoints: Pt[],
+): Pt[] {
+  const pts: Pt[] = [
+    { x: sourceX, y: sourceY },
+    ...waypoints.map((p) => ({ x: p.x, y: p.y })),
+    { x: targetX, y: targetY },
+  ]
+  return simplifyOrth(repairOrthogonal(pts))
+}
+
+/** Force every segment onto a shared X or Y with its predecessor. */
+function repairOrthogonal(points: Pt[]): Pt[] {
+  if (points.length < 2) return points
+  const out: Pt[] = [{ ...points[0] }]
+  for (let i = 1; i < points.length; i++) {
+    const prev = out[out.length - 1]
+    const cur = points[i]
+    const isLast = i === points.length - 1
+    if (isLast) {
+      // Keep the real target; insert a corner if needed so the last hop is H or V.
+      const dx = Math.abs(cur.x - prev.x)
+      const dy = Math.abs(cur.y - prev.y)
+      if (dx > 0.5 && dy > 0.5) {
+        out.push({ x: prev.x, y: cur.y })
+      }
+      out.push({ ...cur })
+      continue
+    }
+    const dx = Math.abs(cur.x - prev.x)
+    const dy = Math.abs(cur.y - prev.y)
+    if (dx <= 0.5 || dy <= 0.5) {
+      out.push({
+        x: dx <= dy ? prev.x : cur.x,
+        y: dy < dx ? prev.y : cur.y,
+      })
+    } else {
+      // Prefer keeping the waypoint's dominant axis from the previous point
+      out.push({ x: cur.x, y: prev.y })
+      out.push({ x: cur.x, y: cur.y })
+    }
+  }
+  return out
+}
+
+export type SegmentDragResult = {
+  points: Pt[]
+  /** Segment index to keep dragging after elbows are inserted. */
+  activeSegment: number
+}
+
+/**
+ * Drag one orthogonal segment to `pointer` (flow coords), keeping H/V edges.
+ * Endpoint-adjacent segments insert an elbow so handle anchors stay fixed.
+ */
+export function dragOrthogonalSegment(
+  points: Pt[],
+  segmentIndex: number,
+  pointer: Pt,
+): SegmentDragResult {
+  if (segmentIndex < 0 || segmentIndex >= points.length - 1) {
+    return { points, activeSegment: segmentIndex }
+  }
+
+  const pts = points.map((p) => ({ ...p }))
+  const start = pts[segmentIndex]
+  const end = pts[segmentIndex + 1]
+  const horizontal = Math.abs(start.y - end.y) <= Math.abs(start.x - end.x)
+  const isFirst = segmentIndex === 0
+  const isLast = segmentIndex === pts.length - 2
+  let activeSegment = segmentIndex
+
+  if (horizontal) {
+    const y = snapToGrid(pointer.y)
+    if (isFirst && isLast) {
+      const midX = snapToGrid((start.x + end.x) / 2)
+      return {
+        points: simplifyOrth([
+          start,
+          { x: midX, y: start.y },
+          { x: midX, y },
+          { x: end.x, y },
+          end,
+        ]),
+        activeSegment: 2,
+      }
+    }
+    if (isFirst) {
+      const exitX = snapToGrid(
+        start.x + Math.sign(end.x - start.x || 1) * STUB,
+      )
+      pts.splice(1, 0, { x: exitX, y: start.y }, { x: exitX, y })
+      pts[3] = { ...pts[3], y }
+      activeSegment = 2
+    } else if (isLast) {
+      const entryX = snapToGrid(
+        end.x + Math.sign(start.x - end.x || 1) * STUB,
+      )
+      pts.splice(pts.length - 1, 0, { x: entryX, y }, { x: entryX, y: end.y })
+      pts[pts.length - 4] = { ...pts[pts.length - 4], y }
+      activeSegment = pts.length - 4
+    } else {
+      pts[segmentIndex] = { ...start, y }
+      pts[segmentIndex + 1] = { ...end, y }
+    }
+  } else {
+    const x = snapToGrid(pointer.x)
+    if (isFirst && isLast) {
+      const midY = snapToGrid((start.y + end.y) / 2)
+      return {
+        points: simplifyOrth([
+          start,
+          { x: start.x, y: midY },
+          { x, y: midY },
+          { x, y: end.y },
+          end,
+        ]),
+        activeSegment: 2,
+      }
+    }
+    if (isFirst) {
+      const exitY = snapToGrid(
+        start.y + Math.sign(end.y - start.y || 1) * STUB,
+      )
+      pts.splice(1, 0, { x: start.x, y: exitY }, { x, y: exitY })
+      pts[3] = { ...pts[3], x }
+      activeSegment = 2
+    } else if (isLast) {
+      const entryY = snapToGrid(
+        end.y + Math.sign(start.y - end.y || 1) * STUB,
+      )
+      pts.splice(pts.length - 1, 0, { x, y: entryY }, { x: end.x, y: entryY })
+      pts[pts.length - 4] = { ...pts[pts.length - 4], x }
+      activeSegment = pts.length - 4
+    } else {
+      pts[segmentIndex] = { ...start, x }
+      pts[segmentIndex + 1] = { ...end, x }
+    }
+  }
+
+  const simplified = simplifyOrth(pts)
+  return {
+    points: simplified,
+    activeSegment: Math.max(0, Math.min(activeSegment, simplified.length - 2)),
+  }
+}
+
+export function computeOrthogonalPoints({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  sourceNest,
+  targetNest,
+  obstacles = [],
+  sourceRect,
+  targetRect,
+  selfLoop = false,
+  gap = PAIR_LANE_GAP,
+  stub = STUB,
+  waypoints,
+}: {
+  sourceX: number
+  sourceY: number
+  targetX: number
+  targetY: number
+  sourcePosition: Position
+  targetPosition: Position
+  sourceNest: SideNesting
+  targetNest: SideNesting
+  obstacles?: ObstacleRect[]
+  sourceRect?: ObstacleRect
+  targetRect?: ObstacleRect
+  selfLoop?: boolean
+  gap?: number
+  stub?: number
+  /** Manual interior bends — when present, skips auto routing. */
+  waypoints?: Pt[] | null
+}): Pt[] {
+  if (waypoints && waypoints.length > 0) {
+    return pointsFromWaypoints(sourceX, sourceY, targetX, targetY, waypoints)
+  }
+
+  const nest = sourceNest.count >= targetNest.count ? sourceNest : targetNest
+  const lane = sideLaneOffset(nest, gap)
+  const endpoints = { source: sourceRect, target: targetRect }
+
+  if (selfLoop) {
+    return selfLoopWaypoints(
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      sourcePosition,
+      targetPosition,
+      nest,
+      sourceRect ?? targetRect,
+      stub,
+      gap,
+    )
+  }
+
+  const primary = sideAwareWaypoints(
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    sourceNest,
+    targetNest,
+    gap,
+    stub,
+  )
+
+  const wraps =
+    obstacles.length > 0
+      ? wrapCandidates(
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          sourcePosition,
+          targetPosition,
+          obstacles,
+          stub,
+          lane,
+        )
+      : []
+  return pickBestPath(
+    [primary, ...wraps],
+    obstacles,
+    endpoints,
+    sourcePosition,
+    targetPosition,
+  )
+}
+
 /**
  * Orthogonal path on the canvas grid. Routes around other nodes when
  * `obstacles` are provided so edges don't cut through diagrams.
@@ -1048,6 +1358,7 @@ export function getOrthogonalEdgePath({
   borderRadius = 6,
   gap = PAIR_LANE_GAP,
   stub = STUB,
+  waypoints,
 }: {
   sourceX: number
   sourceY: number
@@ -1066,30 +1377,9 @@ export function getOrthogonalEdgePath({
   borderRadius?: number
   gap?: number
   stub?: number
-}): [string, number, number] {
-  const nest = sourceNest.count >= targetNest.count ? sourceNest : targetNest
-  const lane = sideLaneOffset(nest, gap)
-  const endpoints = { source: sourceRect, target: targetRect }
-
-  if (selfLoop) {
-    const points = selfLoopWaypoints(
-      sourceX,
-      sourceY,
-      targetX,
-      targetY,
-      sourcePosition,
-      targetPosition,
-      nest,
-      sourceRect ?? targetRect,
-      stub,
-      gap,
-    )
-    const path = pointsToPath(points, borderRadius)
-    const label = pathLabelCenter(points)
-    return [path, label.x, label.y]
-  }
-
-  const primary = sideAwareWaypoints(
+  waypoints?: Pt[] | null
+}): [string, number, number, Pt[]] {
+  const points = computeOrthogonalPoints({
     sourceX,
     sourceY,
     targetX,
@@ -1098,34 +1388,16 @@ export function getOrthogonalEdgePath({
     targetPosition,
     sourceNest,
     targetNest,
+    obstacles,
+    sourceRect,
+    targetRect,
+    selfLoop,
     gap,
     stub,
-  )
-
-  // Always score against endpoint hugging, even when no other obstacles exist
-  const wraps =
-    obstacles.length > 0
-      ? wrapCandidates(
-          sourceX,
-          sourceY,
-          targetX,
-          targetY,
-          sourcePosition,
-          targetPosition,
-          obstacles,
-          stub,
-          lane,
-        )
-      : []
-  const points = pickBestPath(
-    [primary, ...wraps],
-    obstacles,
-    endpoints,
-    sourcePosition,
-    targetPosition,
-  )
+    waypoints,
+  })
 
   const path = pointsToPath(points, borderRadius)
   const label = pathLabelCenter(points)
-  return [path, label.x, label.y]
+  return [path, label.x, label.y, points]
 }
